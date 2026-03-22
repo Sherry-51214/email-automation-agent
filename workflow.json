@@ -1,0 +1,1927 @@
+{
+  "name": "Email Automation Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "forceReconnect": 5
+        }
+      },
+      "id": "bd0b0396-0bb9-4814-88d4-88db32744c04",
+      "name": "IMAP Email Trigger",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        256,
+        496
+      ],
+      "credentials": {
+        "imap": {
+          "id": "YOUR_IMAP_CREDENTIAL_ID",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "telegram_chat_id",
+              "value": "<__PLACEHOLDER_VALUE__your_telegram_chat_id__>",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "company_name",
+              "value": "Your Company",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "support_email",
+              "value": "<__PLACEHOLDER_VALUE__support@yourcompany.com__>",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5b025f00-bab8-4e98-bb64-4b76c5f03852",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "from_email",
+              "value": "={{ $json.from.value[0].address }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "from_name",
+              "value": "={{ $json.from.value[0].name || $json.from.value[0].address }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "subject",
+              "value": "={{ $json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "body",
+              "value": "={{ $json.text || $json.html }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "message_id",
+              "value": "={{ $json.messageId }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "thread_id",
+              "value": "={{ $json.inReplyTo || $json.messageId }}",
+              "type": "string"
+            },
+            {
+              "id": "id-7",
+              "name": "received_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b86e29f1-b72e-44b0-821f-2049ce3cf0de",
+      "name": "Parse Email Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "contacts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.from_email }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $json.from_email }}"
+            },
+            {
+              "fieldId": "name",
+              "fieldValue": "={{ $json.from_name }}"
+            },
+            {
+              "fieldId": "last_interaction",
+              "fieldValue": "={{ $json.received_at }}"
+            }
+          ]
+        }
+      },
+      "id": "192a8a86-0615-46b2-b5b0-0844dfe73bbf",
+      "name": "Upsert Contact",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        928,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify this email and return JSON only with these exact fields:\n\n- category: must be one of: lead, support, billing, internal, other\n- priority: must be one of: low, medium, high\n- intent: must be one of: reply, new_request, unsubscribe, data_request\n- summary: brief summary in 30 words or less\n\nEmail details:\nFrom: {{ $json.from_name }} <{{ $json.from_email }}>\nSubject: {{ $json.subject }}\nBody: {{ $json.body }}\n\nClassification rules:\n- If email contains 'unsubscribe', 'stop', 'opt out', 'remove me' → intent=unsubscribe\n- If email mentions 'delete my data', 'GDPR', 'data request', 'access my data', 'export my data' → intent=data_request\n- Billing keywords: invoice, payment, subscription, refund, charge\n- Support keywords: help, issue, problem, error, not working\n- Lead keywords: interested, pricing, demo, trial, information\n\nReturn ONLY the JSON object, no other text.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an email classification AI. Your task is to analyze incoming emails and classify them according to specific categories, priorities, and intents. Always return valid JSON with the exact structure specified. Be consistent and accurate in your classifications."
+        }
+      },
+      "id": "751ba077-417a-47bd-a3d9-7dd28c462d1d",
+      "name": "AI Classify Email",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1152,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "5c7d8b2a-0db4-4f78-a886-c12bf0775792",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1168,
+        720
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"category\": \"lead\",\n  \"priority\": \"medium\",\n  \"intent\": \"new_request\",\n  \"summary\": \"Customer asking about pricing and features\"\n}"
+      },
+      "id": "ee1b71ab-fc76-41f7-901d-3388bea6e46d",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1296,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "conversations",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.thread_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $('Upsert Contact').item.json.id }}"
+            },
+            {
+              "fieldId": "thread_id",
+              "fieldValue": "={{ $json.thread_id }}"
+            },
+            {
+              "fieldId": "category",
+              "fieldValue": "={{ $json.output.category }}"
+            },
+            {
+              "fieldId": "priority",
+              "fieldValue": "={{ $json.output.priority }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "open"
+            },
+            {
+              "fieldId": "last_inbound",
+              "fieldValue": "={{ $json.received_at }}"
+            }
+          ]
+        }
+      },
+      "id": "eb1b147e-b586-4e68-9a43-aa1fa81638e1",
+      "name": "Save Conversation",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1504,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "unsubscribe",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Unsubscribe"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "data_request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Data Request"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "unsubscribe",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "data_request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Normal"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "644515d4-c79e-4589-bd45-f9997518a8bb",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1728,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "contacts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.from_email }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "consent_status",
+              "fieldValue": "opted_out"
+            }
+          ]
+        }
+      },
+      "id": "3623f8f9-07d2-46ce-b84d-9aab53d09e16",
+      "name": "Mark Opted Out",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "events_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $('Upsert Contact').item.json.id }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "unsubscribe"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "User opted out via email"
+            }
+          ]
+        }
+      },
+      "id": "e66e88e5-160f-4a9a-9bad-dee3af00bdad",
+      "name": "Log Unsubscribe Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Workflow Configuration').item.json.support_email }}",
+        "toEmail": "={{ $json.from_email }}",
+        "subject": "Unsubscribe Confirmation",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.from_name }},\n\nYou have been successfully unsubscribed from our mailing list. You will no longer receive marketing emails from us.\n\nIf this was a mistake, please contact us at {{ $('Workflow Configuration').item.json.support_email }}.\n\nBest regards,\n{{ $('Workflow Configuration').item.json.company_name }}",
+        "options": {}
+      },
+      "id": "4cda80f4-f59f-4f7a-afb5-b9194438a8e5",
+      "name": "Send Unsubscribe Confirmation",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2400,
+        304
+      ],
+      "webhookId": "7ce01a75-d46e-4f79-8467-bbf203c4195e"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Workflow Configuration').item.json.telegram_chat_id }}",
+        "text": "=🚫 UNSUBSCRIBE ALERT\n\nContact: {{ $json.from_name }} ({{ $json.from_email }})\nSubject: {{ $json.subject }}\nTime: {{ $json.received_at }}\n\nUser has opted out and been marked as opted_out in database.",
+        "additionalFields": {}
+      },
+      "id": "6e11eeee-db47-4a90-b76a-d821b750315a",
+      "name": "Notify Unsubscribe",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2624,
+        304
+      ],
+      "webhookId": "d12cbab2-04e6-4b53-bfe7-ead9f4cdb8d3",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "events_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $('Upsert Contact').item.json.id }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "data_request"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "GDPR data request received - requires manual handling"
+            }
+          ]
+        }
+      },
+      "id": "9c963e92-bde7-4c04-a11c-a3a85a4dbc14",
+      "name": "Log Data Request Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Workflow Configuration').item.json.support_email }}",
+        "toEmail": "={{ $json.from_email }}",
+        "subject": "Data Request Received",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.from_name }},\n\nWe have received your data request. Our team will process your request and respond within 30 days as required by GDPR.\n\nIf you have any questions, please contact us at {{ $('Workflow Configuration').item.json.support_email }}.\n\nBest regards,\n{{ $('Workflow Configuration').item.json.company_name }}",
+        "options": {}
+      },
+      "id": "92f90bbc-400e-45d7-9fdd-b5d7a5763cbf",
+      "name": "Send Data Request Acknowledgment",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2176,
+        496
+      ],
+      "webhookId": "f36ff3ab-c127-4b03-8781-35b84912d5ea"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Workflow Configuration').item.json.telegram_chat_id }}",
+        "text": "=⚠️ GDPR DATA REQUEST\n\nContact: {{ $json.from_name }} ({{ $json.from_email }})\nSubject: {{ $json.subject }}\nTime: {{ $json.received_at }}\n\nACTION REQUIRED: Manual handling needed for GDPR compliance.\nRespond within 30 days.",
+        "additionalFields": {}
+      },
+      "id": "47b34e9f-0082-48a7-9911-c88e8cdcfc3f",
+      "name": "Alert Data Request",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2400,
+        496
+      ],
+      "webhookId": "3915e7d0-e13b-4135-be43-2547d740a02e",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "support",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Support"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "billing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Billing"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "lead",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Lead"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Other"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8c854e0f-5d55-4591-8119-112ce8bfb254",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1952,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Workflow Configuration').item.json.support_email }}",
+        "toEmail": "={{ $json.from_email }}",
+        "subject": "=Re: {{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.from_name }},\n\nThank you for contacting our support team. We have received your message and will respond as soon as possible.\n\nYour ticket summary: {{ $json.summary }}\n\nBest regards,\n{{ $('Workflow Configuration').item.json.company_name }} Support Team",
+        "options": {}
+      },
+      "id": "01e6a0c3-234a-4e74-b873-820f7fd90bf0",
+      "name": "Send Support Acknowledgment",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2400,
+        688
+      ],
+      "webhookId": "d0d519df-24ed-481f-9a72-fd7c09678637"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Workflow Configuration').item.json.support_email }}",
+        "toEmail": "={{ $json.from_email }}",
+        "subject": "=Re: {{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.from_name }},\n\nThank you for contacting our billing department. We have received your inquiry and will respond shortly.\n\nYour inquiry: {{ $json.summary }}\n\nBest regards,\n{{ $('Workflow Configuration').item.json.company_name }} Billing Team",
+        "options": {}
+      },
+      "id": "94363152-7e28-4cc3-a19f-392d6a4e694b",
+      "name": "Send Billing Acknowledgment",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2400,
+        880
+      ],
+      "webhookId": "3a71eb38-f274-4d98-afaa-8aecb16be9ca"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Upsert Contact').item.json.consent_status }}",
+              "rightValue": "opted_in",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "924241a2-86c4-4b64-b51b-00aac3d3b714",
+      "name": "Check Consent Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2176,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Workflow Configuration').item.json.support_email }}",
+        "toEmail": "={{ $json.from_email }}",
+        "subject": "=Re: {{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "=Hi {{ $json.from_name }},\n\nThank you for your interest! We'd be happy to help you.\n\n{{ $json.summary }}\n\nWe'll follow up with more information soon. If you have any immediate questions, feel free to reply to this email.\n\nBest regards,\n{{ $('Workflow Configuration').item.json.company_name }}\n\nReply STOP or UNSUBSCRIBE to opt out.",
+        "options": {}
+      },
+      "id": "5f4d0838-dd45-4fea-a10a-fb6949077e18",
+      "name": "Send Lead Reply",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2400,
+        1072
+      ],
+      "webhookId": "64ed4f8d-cc02-47a4-909a-cf1e8eca1ed1"
+    },
+    {
+      "parameters": {
+        "tableId": "events_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $('Upsert Contact').item.json.id }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "auto_reply"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "=Auto-reply sent for {{ $json.category }} category"
+            }
+          ]
+        }
+      },
+      "id": "b21f3ee6-b5c0-4743-8b24-dbd162b4e225",
+      "name": "Log Auto Reply Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2624,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.priority }}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0c067fd0-b1ef-44b2-ab24-522d82181fd9",
+      "name": "Check High Priority",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2848,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Workflow Configuration').item.json.telegram_chat_id }}",
+        "text": "=🔴 HIGH PRIORITY EMAIL\n\nFrom: {{ $json.from_name }} ({{ $json.from_email }})\nCategory: {{ $json.category }}\nSubject: {{ $json.subject }}\nSummary: {{ $json.summary }}\n\nTime: {{ $json.received_at }}",
+        "additionalFields": {}
+      },
+      "id": "bbfef5fe-f49a-4a89-8136-290ac9b1bbe0",
+      "name": "Notify High Priority",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3072,
+        896
+      ],
+      "webhookId": "74a4de08-833c-43e7-85cd-38da1245a9e0",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "id": "548a3fdc-f37c-4853-836c-7c1624f2d2c1",
+      "name": "Daily 10:00 Follow-up Scheduler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        256,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "conversations",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "open"
+            },
+            {
+              "keyName": "last_outbound",
+              "condition": "lt",
+              "keyValue": "={{ $json.three_days_ago }}"
+            }
+          ]
+        }
+      },
+      "id": "0d449301-e51c-4fc9-8003-f62c1ed6749d",
+      "name": "Find Stale Conversations",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        704,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "subtractFromDate",
+        "magnitude": "={{ $now }}",
+        "duration": 3,
+        "outputFieldName": "three_days_ago",
+        "options": {}
+      },
+      "id": "ab8898c4-6ddf-4b7e-829a-7c386891dc97",
+      "name": "Calculate 3 Days Ago",
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.consent_status }}",
+              "rightValue": "opted_out",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22e24517-9142-4f48-a5b1-70fc40f540e6",
+      "name": "Filter Allowed Contacts",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        928,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "outbound_queue",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $json.contact_id }}"
+            },
+            {
+              "fieldId": "type",
+              "fieldValue": "followup"
+            },
+            {
+              "fieldId": "subject",
+              "fieldValue": "Following up on our conversation"
+            },
+            {
+              "fieldId": "body",
+              "fieldValue": "Hi,\n\nI wanted to follow up on our previous conversation. Do you have any questions or need any assistance?\n\nBest regards,\n\nReply STOP or UNSUBSCRIBE to opt out."
+            },
+            {
+              "fieldId": "scheduled_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "pending"
+            }
+          ]
+        }
+      },
+      "id": "5a8f2845-4652-49d5-9389-1897cebb3364",
+      "name": "Create Follow-up Queue Items",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1152,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "events_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $json.contact_id }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "followup_queued"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "=Follow-up email queued for conversation {{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "78a43b7f-f078-45fc-b34b-5cb10fd3697b",
+      "name": "Log Follow-up Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "8f845894-c419-45fb-9c24-1ba7ea0531bb",
+      "name": "Every 10 Min Queue Worker",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        256,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "outbound_queue",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            },
+            {
+              "keyName": "scheduled_at",
+              "condition": "lte",
+              "keyValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "b4bb6ec2-42a7-42dd-9b52-551ae7339080",
+      "name": "Get Pending Queue Items",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        480,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a61ddaf2-9aee-45b4-93a5-657fbc3b275e",
+      "name": "Check Items Exist",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        704,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "contacts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $json.contact_id }}"
+            }
+          ]
+        }
+      },
+      "id": "134e6ad3-461b-4f03-801b-a639f013fd61",
+      "name": "Get Contact Consent Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        928,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.consent_status }}",
+              "rightValue": "opted_out",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ae5a2af4-6fb9-43c5-bf88-6a557dbd33bb",
+      "name": "Check Not Opted Out",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1152,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Workflow Configuration').item.json.support_email }}",
+        "toEmail": "={{ $('Get Contact Consent Status').item.json.email }}",
+        "subject": "={{ $('Get Pending Queue Items').item.json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $('Get Pending Queue Items').item.json.body }}",
+        "options": {}
+      },
+      "id": "38124f37-cb74-4afc-8b8e-972e5a9fba52",
+      "name": "Send Queued Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1376,
+        1520
+      ],
+      "webhookId": "48d5bceb-7575-455b-b223-7f25cd481273"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "outbound_queue",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Pending Queue Items').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "sent"
+            }
+          ]
+        }
+      },
+      "id": "00828efe-af5f-4fb4-8b79-fe502b42dcb5",
+      "name": "Mark Queue Item Sent",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "conversations",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "contact_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Pending Queue Items').item.json.contact_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "last_outbound",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "8695a585-f855-4320-b85f-87f3c437cf00",
+      "name": "Update Conversation Last Outbound",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "events_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $('Get Pending Queue Items').item.json.contact_id }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "email_sent"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "=Outbound email sent: {{ $('Get Pending Queue Items').item.json.type }}"
+            }
+          ]
+        }
+      },
+      "id": "40120dbe-e55e-48d1-bf51-194280cf0b1a",
+      "name": "Log Send Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2048,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "outbound_queue",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Pending Queue Items').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "blocked"
+            },
+            {
+              "fieldId": "block_reason",
+              "fieldValue": "opted_out"
+            }
+          ]
+        }
+      },
+      "id": "6c7fb016-eb07-4c21-9af8-e11d3402d369",
+      "name": "Mark Queue Item Blocked",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "events_log",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "contact_id",
+              "fieldValue": "={{ $('Get Pending Queue Items').item.json.contact_id }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "email_blocked"
+            },
+            {
+              "fieldId": "details",
+              "fieldValue": "Email blocked - contact opted out"
+            }
+          ]
+        }
+      },
+      "id": "4ef470c9-0ae3-4ef9-a7e4-8cce3690c402",
+      "name": "Log Blocked Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 20
+            }
+          ]
+        }
+      },
+      "id": "e03a1799-e0f5-4d67-aafc-953f698bc955",
+      "name": "Daily 20:00 Report",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        256,
+        1936
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "roundDate",
+        "date": "={{ $now }}",
+        "toNearest": "day",
+        "outputFieldName": "today_start",
+        "options": {}
+      },
+      "id": "d6fd2e93-6f07-4a73-bf44-761fb289624a",
+      "name": "Calculate Today Start",
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1936
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "events_log",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "ts",
+              "condition": "gte",
+              "keyValue": "={{ $('Calculate Today Start').item.json.today_start }}"
+            }
+          ]
+        }
+      },
+      "id": "67e44a78-87d9-4b41-968f-4fb97617dee1",
+      "name": "Get Today Events",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        704,
+        1936
+      ]
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "action",
+              "renameField": true,
+              "outputFieldName": "total_events"
+            },
+            {
+              "fieldToAggregate": "action",
+              "renameField": true,
+              "outputFieldName": "auto_replies"
+            },
+            {
+              "fieldToAggregate": "action",
+              "renameField": true,
+              "outputFieldName": "followups_queued"
+            },
+            {
+              "fieldToAggregate": "action",
+              "renameField": true,
+              "outputFieldName": "emails_sent"
+            },
+            {
+              "fieldToAggregate": "action",
+              "renameField": true,
+              "outputFieldName": "emails_blocked"
+            },
+            {
+              "fieldToAggregate": "action",
+              "renameField": true,
+              "outputFieldName": "opt_outs"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "62ca95db-781a-4a24-a4df-73f979c3590d",
+      "name": "Create Summary Counts",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        928,
+        1936
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "report_message",
+              "value": "=📊 DAILY EMAIL AUTOMATION REPORT\nDate: {{ $now.format('yyyy-MM-dd') }}\n\n📥 Inbound Processing:\n- Total events: {{ $json.total_events || 0 }}\n- Auto-replies sent: {{ $json.auto_replies || 0 }}\n\n📤 Outbound Activity:\n- Follow-ups queued: {{ $json.followups_queued || 0 }}\n- Emails sent: {{ $json.emails_sent || 0 }}\n- Emails blocked: {{ $json.emails_blocked || 0 }}\n\n🚫 GDPR Compliance:\n- Opt-outs today: {{ $json.opt_outs || 0 }}\n\nWorkflow running smoothly ✅",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "18c34807-0d0e-40ea-a244-31e0a3a244ea",
+      "name": "Format Report Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1152,
+        1936
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Workflow Configuration').item.json.telegram_chat_id }}",
+        "text": "={{ $json.report_message }}",
+        "additionalFields": {}
+      },
+      "id": "f1a7ea04-faa5-44e6-8af3-45b306de986c",
+      "name": "Send Daily Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1376,
+        1936
+      ],
+      "webhookId": "1f32f50d-9ddc-4e9f-a76b-c77d37b36ea9",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "IMAP Email Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Parse Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Email Data": {
+      "main": [
+        [
+          {
+            "node": "Upsert Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Contact": {
+      "main": [
+        [
+          {
+            "node": "AI Classify Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Classify Email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Classify Email",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Classify Email": {
+      "main": [
+        [
+          {
+            "node": "Save Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Conversation": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Mark Opted Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Data Request Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Opted Out": {
+      "main": [
+        [
+          {
+            "node": "Log Unsubscribe Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Unsubscribe Event": {
+      "main": [
+        [
+          {
+            "node": "Send Unsubscribe Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Unsubscribe Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Notify Unsubscribe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Data Request Event": {
+      "main": [
+        [
+          {
+            "node": "Send Data Request Acknowledgment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Data Request Acknowledgment": {
+      "main": [
+        [
+          {
+            "node": "Alert Data Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Send Support Acknowledgment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Billing Acknowledgment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Consent Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Consent Status": {
+      "main": [
+        [
+          {
+            "node": "Send Lead Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Support Acknowledgment": {
+      "main": [
+        [
+          {
+            "node": "Log Auto Reply Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Billing Acknowledgment": {
+      "main": [
+        [
+          {
+            "node": "Log Auto Reply Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Lead Reply": {
+      "main": [
+        [
+          {
+            "node": "Log Auto Reply Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Auto Reply Event": {
+      "main": [
+        [
+          {
+            "node": "Check High Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check High Priority": {
+      "main": [
+        [
+          {
+            "node": "Notify High Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 10:00 Follow-up Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Calculate 3 Days Ago",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate 3 Days Ago": {
+      "main": [
+        [
+          {
+            "node": "Find Stale Conversations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Stale Conversations": {
+      "main": [
+        [
+          {
+            "node": "Filter Allowed Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Allowed Contacts": {
+      "main": [
+        [
+          {
+            "node": "Create Follow-up Queue Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Follow-up Queue Items": {
+      "main": [
+        [
+          {
+            "node": "Log Follow-up Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 10 Min Queue Worker": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Queue Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Queue Items": {
+      "main": [
+        [
+          {
+            "node": "Check Items Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Items Exist": {
+      "main": [
+        [
+          {
+            "node": "Get Contact Consent Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contact Consent Status": {
+      "main": [
+        [
+          {
+            "node": "Check Not Opted Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Not Opted Out": {
+      "main": [
+        [
+          {
+            "node": "Send Queued Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Queue Item Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Queued Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Queue Item Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Queue Item Sent": {
+      "main": [
+        [
+          {
+            "node": "Update Conversation Last Outbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversation Last Outbound": {
+      "main": [
+        [
+          {
+            "node": "Log Send Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Queue Item Blocked": {
+      "main": [
+        [
+          {
+            "node": "Log Blocked Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 20:00 Report": {
+      "main": [
+        [
+          {
+            "node": "Calculate Today Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Today Start": {
+      "main": [
+        [
+          {
+            "node": "Get Today Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Today Events": {
+      "main": [
+        [
+          {
+            "node": "Create Summary Counts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Summary Counts": {
+      "main": [
+        [
+          {
+            "node": "Format Report Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Report Message": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3c2b756d-aaf2-42bf-85c1-3a9af54a6014",
+  "meta": {
+    "instanceId": "YOUR_INSTANCE_ID"
+  },
+  "id": "5to6tQZyC9B2dWp1",
+  "tags": []
+}
